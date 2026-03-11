@@ -52,6 +52,7 @@ class Transaction(Base):
     type = Column(String) # buy, sell
     quantity = Column(Float)
     price = Column(Float)
+    fees = Column(Float, default=0.0)
     date = Column(DateTime, default=datetime.datetime.utcnow)
 
 # AI Tools
@@ -150,7 +151,7 @@ async def ask_ai(question: str, base_url: str = None):
         return {"error": str(e)}
 
 @app.post("/transactions/add")
-async def add_transaction(symbol: str, quantity: float, price: float, type: str):
+async def add_transaction(symbol: str, quantity: float, price: float, type: str, fees: float = 0.0):
     """Manually adds a transaction to the database."""
     db = SessionLocal()
     try:
@@ -162,13 +163,15 @@ async def add_transaction(symbol: str, quantity: float, price: float, type: str)
         else:
             if type.lower() == "buy":
                 new_quantity = asset.quantity + quantity
-                asset.average_price = ((asset.quantity * asset.average_price) + (quantity * price)) / new_quantity
+                # Net price including fees for average price calculation
+                total_cost = (asset.quantity * asset.average_price) + (quantity * price) + fees
+                asset.average_price = total_cost / new_quantity
                 asset.quantity = new_quantity
             else:
                 asset.quantity -= quantity
         
         # Log Transaction
-        transaction = Transaction(asset_id=asset.id, type=type, quantity=quantity, price=price)
+        transaction = Transaction(asset_id=asset.id, type=type, quantity=quantity, price=price, fees=fees)
         db.add(transaction)
         db.commit()
         return {"status": "success"}

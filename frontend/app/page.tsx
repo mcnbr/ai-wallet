@@ -31,7 +31,7 @@ export default function Home() {
   const [aiEnabled, setAiEnabled] = useState(true);
   const [showManualModal, setShowManualModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [formData, setFormData] = useState({ symbol: "", quantity: "", price: "", type: "BUY" });
+  const [formData, setFormData] = useState({ symbol: "", quantity: "", price: "", fees: "", type: "BUY" });
   
   // App Settings State
   const [appSettings, setAppSettings] = useState({
@@ -72,12 +72,12 @@ export default function Home() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/transactions/add?symbol=${formData.symbol}&quantity=${formData.quantity}&price=${formData.price}&type=${formData.type}`, {
+      const res = await fetch(`http://localhost:8000/transactions/add?symbol=${formData.symbol}&quantity=${formData.quantity}&price=${formData.price}&type=${formData.type}&fees=${formData.fees || 0}`, {
         method: "POST"
       });
       if (res.ok) {
         setShowManualModal(false);
-        setFormData({ symbol: "", quantity: "", price: "", type: "BUY" });
+        setFormData({ symbol: "", quantity: "", price: "", fees: "", type: "BUY" });
       }
     } catch (err) {
       console.error(err);
@@ -326,23 +326,33 @@ export default function Home() {
                     className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary uppercase font-bold" 
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Quantidade</label>
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Qtd.</label>
                     <input 
                       type="number" step="any" 
                       value={formData.quantity}
                       onChange={(e) => setFormData({...formData, quantity: e.target.value})}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold" 
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-sm" 
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Preço Pago</label>
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Preço</label>
                     <input 
                       type="number" step="any" 
                       value={formData.price}
                       onChange={(e) => setFormData({...formData, price: e.target.value})}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold" 
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-sm" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Taxas</label>
+                    <input 
+                      type="number" step="any" 
+                      value={formData.fees}
+                      onChange={(e) => setFormData({...formData, fees: e.target.value})}
+                      placeholder="0.00"
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-sm" 
                     />
                   </div>
                 </div>
