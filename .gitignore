@@ -29,3 +29,6 @@ src-tauri/binaries/
 # OS
 .DS_Store
 Thumbs.db
+
+# MCP Config (Local secrets)
+mcp_config.json
