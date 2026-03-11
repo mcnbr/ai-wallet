@@ -165,18 +165,28 @@ export default function Home() {
             </div>
 
             {session ? (
-              <img src={session.user?.image || ""} className="w-10 h-10 rounded-xl border-2 border-primary/50 p-0.5" alt="Profile" />
+              <div className="flex items-center gap-3">
+                <div className="p-3 glass rounded-xl cursor-pointer hover:bg-white/5 transition-all group" title="Backup no Google Drive">
+                  <CloudUpload className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />
+                </div>
+                <img src={session.user?.image || ""} className="w-10 h-10 rounded-xl border-2 border-primary/50 p-0.5" alt="Profile" />
+              </div>
             ) : (
-              <button onClick={() => signIn("google")} className="glass-card !p-3 !rounded-xl hover:bg-white/10">
-                <Plus className="w-5 h-5" />
+              <button 
+                onClick={() => signIn("google")} 
+                className="glass-card !p-3 !rounded-xl hover:bg-white/10 flex items-center gap-2 group" 
+                title="Login com Google para Backup"
+              >
+                <CloudUpload className="w-5 h-5 text-gray-400 group-hover:text-blue-400 transition-colors" />
               </button>
             )}
 
             <button 
               onClick={() => setShowManualModal(true)}
-              className="flex items-center gap-2 bg-primary hover:opacity-90 px-6 py-3 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
+              className="bg-primary hover:opacity-90 p-3 rounded-2xl transition-all flex items-center justify-center shadow-lg shadow-primary/20"
+              title="Nova Transação"
             >
-              <Plus className="w-4 h-4" /> NOVO ATIVO
+              <Plus className="w-6 h-6" />
             </button>
           </div>
         </header>
@@ -205,22 +215,23 @@ export default function Home() {
             </div>
 
             {/* Asset Categories */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               {[
-                { label: "Ações", value: "R$ 15.200", icon: <TrendingUp className="w-5 h-5 text-green-400" />, trend: "+1.2%" },
+                { label: "Ações BR", value: "R$ 15.200", icon: <TrendingUp className="w-5 h-5 text-green-400" />, trend: "+1.2%" },
+                { label: "Stocks (US)", value: "$ 1.450", icon: <PieChart className="w-5 h-5 text-indigo-400" />, trend: "+2.1%" },
                 { label: "Cripto", value: "R$ 4.350", icon: <Bitcoin className="w-5 h-5 text-orange-400" />, trend: "-0.5%" },
                 { label: "FIIs", value: "R$ 12.000", icon: <Building2 className="w-5 h-5 text-blue-400" />, trend: "+0.8%" },
                 { label: "Fixa", value: "R$ 13.000", icon: <Landmark className="w-5 h-5 text-yellow-500" />, trend: "+0.2%" },
               ].map((asset) => (
-                <div key={asset.label} className="glass-card hover:scale-[1.02] active:scale-[0.98]">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="p-2 bg-white/5 rounded-lg border border-white/10">{asset.icon}</div>
-                    <span className={`text-[10px] font-bold ${asset.trend.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}>
+                <div key={asset.label} className="glass-card hover:scale-[1.02] active:scale-[0.98] !p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="p-1.5 bg-white/5 rounded-lg border border-white/10">{asset.icon}</div>
+                    <span className={`text-[9px] font-bold ${asset.trend.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}>
                       {asset.trend}
                     </span>
                   </div>
-                  <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">{asset.label}</p>
-                  <p className="text-xl font-black mt-1">{asset.value}</p>
+                  <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest truncate">{asset.label}</p>
+                  <p className="text-lg font-black mt-1">{asset.value}</p>
                 </div>
               ))}
             </div>
