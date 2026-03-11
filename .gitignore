@@ -1,0 +1,30 @@
+# Environments
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Tauri
+src-tauri/target/
+
+# Data
+*.db
+*.db-journal
+
+# OS
+.DS_Store
+Thumbs.db
