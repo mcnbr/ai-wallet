@@ -111,7 +111,7 @@ export default function Home() {
     if (!question) return;
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/ai/ask?question=" + encodeURIComponent(question), {
+      const res = await fetch(`http://localhost:8000/ai/ask?question=${encodeURIComponent(question)}&base_url=${encodeURIComponent(appSettings.lmStudioUrl)}`, {
         method: "POST",
       });
       const data = await res.json();

@@ -122,9 +122,29 @@ async def root():
     return {"message": "Welcome to Carteira API", "status": "active"}
 
 @app.post("/ai/ask")
-async def ask_ai(question: str):
+async def ask_ai(question: str, base_url: str = None):
     try:
-        response = agent.run(input=question, chat_history=[])
+        # Use provided base_url or fallback to default
+        target_url = base_url or LM_STUDIO_URL
+        
+        # Initialize LLM locally for this request to ensure the correct base_url is used
+        current_llm = ChatOpenAI(
+            base_url=target_url,
+            api_key="not-needed",
+            model="gpt-oss-20b",
+            temperature=0.7
+        )
+        
+        # Initialize Agent
+        current_agent = initialize_agent(
+            tools, 
+            current_llm, 
+            agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
+            verbose=True,
+            handle_parsing_errors=True
+        )
+        
+        response = current_agent.run(input=question, chat_history=[])
         return {"answer": response}
     except Exception as e:
         return {"error": str(e)}
