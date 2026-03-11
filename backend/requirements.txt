@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+pydantic
+sqlalchemy
+psycopg2-binary
+yfinance
+python-dotenv
+langchain-openai
+duckduckgo-search
+httpx
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
+correpy
+pypdf
