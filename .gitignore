@@ -20,6 +20,7 @@ dist/
 
 # Tauri
 src-tauri/target/
+src-tauri/binaries/
 
 # Data
 *.db
