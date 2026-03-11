@@ -14,9 +14,14 @@ import {
   PieChart, 
   Bitcoin, 
   Building2, 
-  Landmark 
+  Landmark,
+  CloudUpload,
+  Settings,
+  Globe,
+  Server
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useEffect } from "react";
 
 export default function Home() {
   const { data: session } = useSession();
@@ -25,7 +30,34 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(true);
   const [showManualModal, setShowManualModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [formData, setFormData] = useState({ symbol: "", quantity: "", price: "", type: "BUY" });
+  
+  // App Settings State
+  const [appSettings, setAppSettings] = useState({
+    walletName: "AI WALLET",
+    language: "pt-br",
+    lmStudioUrl: "http://localhost:1234/v1"
+  });
+
+  // Load settings on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("ai_wallet_settings");
+    if (saved) {
+      try {
+        setAppSettings(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to load settings", e);
+      }
+    }
+  }, []);
+
+  // Save settings
+  const saveSettings = (newSettings: typeof appSettings) => {
+    setAppSettings(newSettings);
+    localStorage.setItem("ai_wallet_settings", JSON.stringify(newSettings));
+    setShowSettingsModal(false);
+  };
 
   // Mock data for the chart
   const chartData = [
@@ -106,14 +138,22 @@ export default function Home() {
               <Wallet className="w-8 h-8 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-black tracking-tighter neon-text">
-                AI WALLET
+              <h1 className="text-3xl font-black tracking-tighter neon-text uppercase">
+                {appSettings.walletName}
               </h1>
               <p className="text-gray-400 text-sm font-medium tracking-wide">SMART ASSET MANAGEMENT</p>
             </div>
           </div>
 
           <div className="flex items-center gap-4 w-full md:w-auto">
+            <button 
+              onClick={() => setShowSettingsModal(true)}
+              className="p-3 glass rounded-xl cursor-pointer hover:bg-white/5 transition-all group"
+              title="Configurações"
+            >
+              <Settings className="w-5 h-5 text-gray-400 group-hover:rotate-90 transition-transform duration-500" />
+            </button>
+
             <div className="flex items-center gap-3 bg-white/5 p-2 rounded-2xl border border-white/10 px-4">
               <Bot className={`w-5 h-5 ${aiEnabled ? 'text-primary' : 'text-gray-500'}`} />
               <button 
@@ -303,6 +343,79 @@ export default function Home() {
                   Confirmar Lançamento
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showSettingsModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md" 
+              onClick={() => setShowSettingsModal(false)} 
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative glass-card max-w-md w-full !p-8"
+            >
+              <div className="flex items-center gap-3 mb-8">
+                <Settings className="w-8 h-8 text-primary" />
+                <h3 className="text-3xl font-black tracking-tighter">Configurações</h3>
+              </div>
+              
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 flex items-center gap-2">
+                    <Wallet className="w-3 h-3" /> Nome da Carteira
+                  </label>
+                  <input 
+                    type="text" 
+                    value={appSettings.walletName}
+                    onChange={(e) => setAppSettings({...appSettings, walletName: e.target.value})}
+                    placeholder="Ex: Minha Carteira" 
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold" 
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 flex items-center gap-2">
+                    <Globe className="w-3 h-3" /> Idioma
+                  </label>
+                  <select 
+                    value={appSettings.language}
+                    onChange={(e) => setAppSettings({...appSettings, language: e.target.value})}
+                    className="w-full bg-[#111] border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold appearance-none"
+                  >
+                    <option value="pt-br">Português (Brasil)</option>
+                    <option value="english">English</option>
+                    <option value="spanish">Español</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 flex items-center gap-2">
+                    <Server className="w-3 h-3" /> LM Studio Server URL
+                  </label>
+                  <input 
+                    type="text" 
+                    value={appSettings.lmStudioUrl}
+                    onChange={(e) => setAppSettings({...appSettings, lmStudioUrl: e.target.value})}
+                    placeholder="http://localhost:1234/v1" 
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-mono text-xs" 
+                  />
+                </div>
+
+                <button 
+                  onClick={() => saveSettings(appSettings)}
+                  className="w-full bg-primary py-5 rounded-2xl font-black text-sm uppercase tracking-widest mt-4 shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
