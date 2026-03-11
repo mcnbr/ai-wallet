@@ -2,6 +2,21 @@
 
 import { useState } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
+import { StockChart } from "./components/StockChart";
+import { 
+  TrendingUp, 
+  Wallet, 
+  Plus, 
+  LogOut, 
+  Bot, 
+  Send, 
+  FileText, 
+  PieChart, 
+  Bitcoin, 
+  Building2, 
+  Landmark 
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function Home() {
   const { data: session } = useSession();
@@ -12,8 +27,18 @@ export default function Home() {
   const [showManualModal, setShowManualModal] = useState(false);
   const [formData, setFormData] = useState({ symbol: "", quantity: "", price: "", type: "BUY" });
 
+  // Mock data for the chart
+  const chartData = [
+    { time: '2024-01-01', value: 38000 },
+    { time: '2024-02-01', value: 40500 },
+    { time: '2024-03-01', value: 39000 },
+    { time: '2024-04-01', value: 42000 },
+    { time: '2024-05-01', value: 44550 },
+  ];
+
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     try {
       const res = await fetch(`http://localhost:8000/transactions/add?symbol=${formData.symbol}&quantity=${formData.quantity}&price=${formData.price}&type=${formData.type}`, {
         method: "POST"
@@ -21,11 +46,11 @@ export default function Home() {
       if (res.ok) {
         setShowManualModal(false);
         setFormData({ symbol: "", quantity: "", price: "", type: "BUY" });
-        alert("Transação salva com sucesso!");
       }
     } catch (err) {
-      alert("Erro ao salvar transação.");
+      console.error(err);
     }
+    setLoading(false);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -43,8 +68,6 @@ export default function Home() {
       const data = await res.json();
       if (data.status === "success") {
         setAnswer(`Extraí ${data.extracted_data.length} transação(ões) da nota ${file.name}.`);
-      } else {
-        setAnswer("Erro ao processar nota: " + data.error);
       }
     } catch (err) {
       setAnswer("Erro ao enviar arquivo.");
@@ -68,197 +91,233 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-blue-500/30">
-      <div className="max-w-6xl mx-auto p-8">
+    <main className="min-h-screen text-white overflow-hidden bg-dot-white/[0.05]">
+      {/* Background Glows */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-600/20 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[120px] rounded-full" />
+      </div>
+
+      <div className="relative z-10 max-w-7xl mx-auto p-4 md:p-8">
         {/* Header */}
-        <header className="flex justify-between items-center mb-16">
-          <div>
-            <h1 className="text-5xl font-extrabold tracking-tight bg-gradient-to-br from-white to-gray-500 bg-clip-text text-transparent">
-              Carteira
-            </h1>
-            <p className="text-gray-500 mt-2 text-lg">Gestão inteligente de patrimônio.</p>
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 glass p-6 rounded-3xl">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-primary rounded-2xl neon-border">
+              <Wallet className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-black tracking-tighter neon-text">
+                AI WALLET
+              </h1>
+              <p className="text-gray-400 text-sm font-medium tracking-wide">SMART ASSET MANAGEMENT</p>
+            </div>
           </div>
-          <div className="flex gap-4">
-            {session ? (
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 mr-4">
-                  <span className="text-xs text-gray-400 uppercase tracking-widest">IA AI</span>
-                  <button 
-                    onClick={() => setAiEnabled(!aiEnabled)}
-                    className={`w-10 h-5 rounded-full transition-all relative ${aiEnabled ? 'bg-blue-600' : 'bg-gray-700'}`}
-                  >
-                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${aiEnabled ? 'left-6' : 'left-1'}`} />
-                  </button>
-                </div>
-                <img src={session.user?.image || ""} alt="" className="w-8 h-8 rounded-full border border-white/20" />
-                <button 
-                  onClick={() => signOut()}
-                  className="bg-[#1a1a1a] hover:bg-[#252525] border border-gray-800 px-6 py-2 rounded-full text-sm font-medium transition-all"
-                >
-                  Sair
-                </button>
-              </div>
-            ) : (
+
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <div className="flex items-center gap-3 bg-white/5 p-2 rounded-2xl border border-white/10 px-4">
+              <Bot className={`w-5 h-5 ${aiEnabled ? 'text-primary' : 'text-gray-500'}`} />
               <button 
-                onClick={() => signIn("google")}
-                className="bg-[#1a1a1a] hover:bg-[#252525] border border-gray-800 px-6 py-2 rounded-full text-sm font-medium transition-all"
+                onClick={() => setAiEnabled(!aiEnabled)}
+                className={`w-10 h-5 rounded-full transition-all relative ${aiEnabled ? 'bg-primary' : 'bg-gray-700'}`}
               >
-                Login com Google
+                <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${aiEnabled ? 'left-6' : 'left-1'}`} />
+              </button>
+            </div>
+
+            {session ? (
+              <img src={session.user?.image || ""} className="w-10 h-10 rounded-xl border-2 border-primary/50 p-0.5" alt="Profile" />
+            ) : (
+              <button onClick={() => signIn("google")} className="glass-card !p-3 !rounded-xl hover:bg-white/10">
+                <Plus className="w-5 h-5" />
               </button>
             )}
+
             <button 
               onClick={() => setShowManualModal(true)}
-              className="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-full text-sm font-bold shadow-lg shadow-blue-900/20 transition-all"
+              className="flex items-center gap-2 bg-primary hover:opacity-90 px-6 py-3 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
             >
-              Nova Transação
+              <Plus className="w-4 h-4" /> NOVO ATIVO
             </button>
           </div>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Dashboard Area */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Balance Card */}
-            <div className="relative group overflow-hidden bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] p-8 rounded-[2rem] border border-white/5 shadow-2xl">
-              <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-blue-600/10 blur-[100px] rounded-full group-hover:bg-blue-500/20 transition-all duration-700" />
-              <div className="relative z-10">
-                <p className="text-gray-400 font-medium">Patrimônio Total</p>
-                <div className="text-5xl font-black mt-2">R$ 44.550,00</div>
-                <div className="flex items-center gap-2 mt-4 text-green-400 font-semibold bg-green-500/10 w-fit px-3 py-1 rounded-full text-sm">
-                  <span className="text-xs">▲</span> +2.4% este mês
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Main Dashboard */}
+          <div className="lg:col-span-8 space-y-8">
+            {/* Portfolio Summary Card */}
+            <div className="glass-card flex flex-col md:flex-row gap-8 items-center lg:items-stretch">
+              <div className="flex-1 space-y-4">
+                <div className="flex items-center gap-2 text-gray-400">
+                  <TrendingUp className="w-4 h-4" />
+                  <span className="text-xs font-bold uppercase tracking-widest">Patrimônio Total</span>
                 </div>
+                <h2 className="text-5xl font-black tabular-nums">R$ 44.550,00</h2>
+                <div className="flex items-center gap-3">
+                  <span className="text-green-400 bg-green-500/10 px-3 py-1 rounded-full text-xs font-bold ring-1 ring-green-500/20">
+                    +2.4% (Hoje)
+                  </span>
+                  <span className="text-gray-500 text-xs">Atualizado há 5 min</span>
+                </div>
+              </div>
+              <div className="w-full md:w-2/3 h-[200px] md:h-auto">
+                <StockChart data={chartData} />
               </div>
             </div>
 
-            {/* Asset Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Asset Categories */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: "Ações", value: "R$ 15.200", icon: "📈", color: "from-green-500/20" },
-                { label: "Cripto", value: "R$ 4.350", icon: "₿", color: "from-orange-500/20" },
-                { label: "FIIs", value: "R$ 12.000", icon: "🏢", color: "from-blue-500/20" },
-                { label: "Tesouro", value: "R$ 13.000", icon: "🏦", color: "from-yellow-500/20" },
+                { label: "Ações", value: "R$ 15.200", icon: <TrendingUp className="w-5 h-5 text-green-400" />, trend: "+1.2%" },
+                { label: "Cripto", value: "R$ 4.350", icon: <Bitcoin className="w-5 h-5 text-orange-400" />, trend: "-0.5%" },
+                { label: "FIIs", value: "R$ 12.000", icon: <Building2 className="w-5 h-5 text-blue-400" />, trend: "+0.8%" },
+                { label: "Fixa", value: "R$ 13.000", icon: <Landmark className="w-5 h-5 text-yellow-500" />, trend: "+0.2%" },
               ].map((asset) => (
-                <div key={asset.label} className={`bg-gradient-to-br ${asset.color} to-transparent bg-opacity-5 p-6 rounded-2xl border border-white/5 hover:border-white/10 transition-all cursor-pointer`}>
-                  <div className="text-2xl mb-2">{asset.icon}</div>
-                  <div className="text-gray-400 text-sm font-medium">{asset.label}</div>
-                  <div className="text-xl font-bold mt-1">{asset.value}</div>
+                <div key={asset.label} className="glass-card hover:scale-[1.02] active:scale-[0.98]">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="p-2 bg-white/5 rounded-lg border border-white/10">{asset.icon}</div>
+                    <span className={`text-[10px] font-bold ${asset.trend.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}>
+                      {asset.trend}
+                    </span>
+                  </div>
+                  <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">{asset.label}</p>
+                  <p className="text-xl font-black mt-1">{asset.value}</p>
                 </div>
               ))}
             </div>
           </div>
 
           {/* AI Sidepanel */}
-          <div className={`lg:col-span-1 transition-all duration-500 ${aiEnabled ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-            <div className="bg-[#0f0f0f] border border-white/10 rounded-[2rem] p-8 h-full flex flex-col shadow-2xl">
-              <h2 className="text-xl font-bold mb-6 flex items-center gap-3">
-                <span className="flex h-3 w-3 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
-                </span>
-                GPT OSS 20B
-              </h2>
-              
-              <div className="flex-1 overflow-y-auto space-y-4 mb-6 pr-2 custom-scrollbar">
-                <div className="bg-[#1a1a1a] p-4 rounded-2xl rounded-tl-none border border-white/5 text-sm leading-relaxed text-gray-300">
-                  Olá! Eu sou seu copiloto de investimentos. Como posso ajudar com sua carteira hoje?
-                </div>
-                {answer && (
-                  <div className="bg-blue-600/10 p-4 rounded-2xl rounded-tr-none border border-blue-500/20 text-sm leading-relaxed text-blue-100 italic">
-                    {answer}
+          <div className="lg:col-span-4 h-full">
+            <AnimatePresence>
+              {aiEnabled && (
+                <motion.div 
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  className="glass-card h-full flex flex-col !p-0 overflow-hidden min-h-[500px]"
+                >
+                  <div className="p-6 border-b border-white/5 bg-white/5">
+                    <h2 className="text-lg font-black flex items-center gap-3 tracking-tighter">
+                      <Bot className="w-6 h-6 text-primary" />
+                      AI ASSISTANT
+                    </h2>
                   </div>
-                )}
-              </div>
 
-              <div className="relative mt-auto">
-                <textarea
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), askAI())}
-                  placeholder="Ex: Qual foi o lucro da Vale no 3T23?"
-                  className="w-full bg-[#1a1a1a] border border-white/10 rounded-2xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all resize-none h-32 pr-12"
-                />
-                <div className="absolute bottom-4 right-4 flex gap-2">
-                  <label className="cursor-pointer bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-all">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                    </svg>
-                    <input type="file" className="hidden" accept=".pdf" onChange={handleFileUpload} />
-                  </label>
-                  <button
-                    onClick={askAI}
-                    disabled={loading}
-                    className="bg-white text-black p-2 rounded-xl hover:bg-gray-200 transition-all disabled:opacity-50"
-                  >
-                    {loading ? "..." : "→"}
-                  </button>
-                </div>
-              </div>
-            </div>
+                  <div className="flex-1 p-6 overflow-y-auto space-y-6 custom-scrollbar">
+                    <div className="glass bg-white/5 p-4 rounded-3xl rounded-tl-none text-sm leading-relaxed border-white/5">
+                      Olá! Sou seu assistente financeiro. Como posso analisar sua carteira hoje?
+                    </div>
+                    {answer && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-primary/10 p-4 rounded-3xl rounded-tr-none text-sm leading-relaxed border border-primary/20 text-blue-100"
+                      >
+                        {answer}
+                      </motion.div>
+                    )}
+                  </div>
+
+                  <div className="p-6 bg-black/20">
+                    <div className="relative">
+                      <textarea
+                        value={question}
+                        onChange={(e) => setQuestion(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), askAI())}
+                        placeholder="Pergunte qualquer coisa..."
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary transition-all resize-none h-24 pr-12"
+                      />
+                      <div className="absolute bottom-3 right-3 flex gap-2">
+                        <label className="cursor-pointer hover:bg-white/10 p-2 rounded-xl transition-all">
+                          <FileText className="w-5 h-5 text-gray-400" />
+                          <input type="file" className="hidden" accept=".pdf" onChange={handleFileUpload} />
+                        </label>
+                        <button
+                          onClick={askAI}
+                          disabled={loading}
+                          className="bg-primary text-white p-2 rounded-xl hover:opacity-90 transition-all disabled:opacity-50"
+                        >
+                          <Send className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
 
-      <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #333;
-          border-radius: 10px;
-        }
-      `}</style>
-      {/* Manual Modal */}
-      {showManualModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowManualModal(false)} />
-          <div className="relative bg-[#111] border border-white/10 rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in fade-in zoom-in duration-300">
-            <h3 className="text-2xl font-bold mb-6">Lançamento Manual</h3>
-            <form className="space-y-4" onSubmit={handleManualSubmit}>
-              <div>
-                <label className="block text-xs text-gray-500 uppercase tracking-widest mb-2 font-bold">Ativo</label>
-                <input 
-                  type="text" 
-                  value={formData.symbol}
-                  onChange={(e) => setFormData({...formData, symbol: e.target.value})}
-                  placeholder="PETR4, BTC, etc" 
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500" 
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-gray-500 uppercase tracking-widest mb-2 font-bold">Qtd</label>
+      <AnimatePresence>
+        {showManualModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md" 
+              onClick={() => setShowManualModal(false)} 
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative glass-card max-w-md w-full !p-8 animate-neon-glow"
+            >
+              <h3 className="text-3xl font-black mb-8 tracking-tighter">Lançamento de Ativo</h3>
+              <form className="space-y-6" onSubmit={handleManualSubmit}>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Símbolo do Ativo</label>
                   <input 
-                    type="number" 
-                    step="any" 
-                    value={formData.quantity}
-                    onChange={(e) => setFormData({...formData, quantity: e.target.value})}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500" 
+                    type="text" 
+                    value={formData.symbol}
+                    onChange={(e) => setFormData({...formData, symbol: e.target.value})}
+                    placeholder="Ex: PETR4, BTC, AAPL" 
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary uppercase font-bold" 
                   />
                 </div>
-                <div>
-                  <label className="block text-xs text-gray-500 uppercase tracking-widest mb-2 font-bold">Preço</label>
-                  <input 
-                    type="number" 
-                    step="any" 
-                    value={formData.price}
-                    onChange={(e) => setFormData({...formData, price: e.target.value})}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500" 
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Quantidade</label>
+                    <input 
+                      type="number" step="any" 
+                      value={formData.quantity}
+                      onChange={(e) => setFormData({...formData, quantity: e.target.value})}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Preço Pago</label>
+                    <input 
+                      type="number" step="any" 
+                      value={formData.price}
+                      onChange={(e) => setFormData({...formData, price: e.target.value})}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold" 
+                    />
+                  </div>
                 </div>
-              </div>
-              <button 
-                type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold mt-4 shadow-lg shadow-blue-900/20 transition-all"
-              >
-                Salvar Transação
-              </button>
-            </form>
+                <button 
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-primary py-5 rounded-2xl font-black text-sm uppercase tracking-widest mt-4 shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+                >
+                  Confirmar Lançamento
+                </button>
+              </form>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
+
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        @keyframes neon-glow {
+          0%, 100% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.1); }
+          50% { box-shadow: 0 0 40px rgba(168, 85, 247, 0.2); }
+        }
+        .animate-neon-glow { animation: neon-glow 4s infinite; }
+      `}</style>
     </main>
   );
 }
