@@ -241,11 +241,20 @@ async def validate_stock(symbol: str, category: str = "stocks"):
         return {"valid": False, "error": str(e)}
 
 @app.get("/api/stock/search")
-async def search_stock(query: str):
-    """Retorna sugestões do Yahoo Finance Autocomplete."""
+async def search_stock(query: str, category: str = "stocks"):
+    """Retorna sugestões filtradas por categoria do Yahoo Finance Autocomplete."""
     import requests
+    import re
     try:
-        url = f"https://query2.finance.yahoo.com/v1/finance/search?q={query}"
+        # Monta a query apropriada para cada categoria
+        search_query = query
+        if category == "fii":
+            # Para FIIs, busca com .SA para encontrar fundos brasileiros
+            if not query.endswith(".SA"):
+                search_query = f"{query}.SA"
+        # Para stocks B3, busca sem .SA e filtra pela exchange SAO
+
+        url = f"https://query2.finance.yahoo.com/v1/finance/search?q={search_query}&quotesCount=15"
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers)
         data = response.json()
@@ -253,18 +262,77 @@ async def search_stock(query: str):
         results = []
         if "quotes" in data:
             for q in data["quotes"]:
-                if 'symbol' in q and 'shortname' in q:
-                    symbol = q['symbol']
-                    # Limpa o .SA para exibição mais limpa se o usuário quiser
-                    display_symbol = symbol.replace('.SA', '') if symbol.endswith('.SA') else symbol
-                    results.append({
-                        "symbol": display_symbol,
-                        "search_symbol": symbol,
-                        "name": q['shortname'],
-                        "type": q.get('quoteType', 'EQUITY'),
-                        "exchange": q.get('exchange', '')
-                    })
-        return {"results": results[:5]} # Retorna os top 5
+                if 'symbol' not in q or 'shortname' not in q:
+                    continue
+                
+                symbol = q['symbol']
+                quote_type = q.get('quoteType', '')
+                exchange = q.get('exchange', '')
+                name = q['shortname']
+
+                # --- FILTRO POR CATEGORIA ---
+                
+                if category == "stocks":
+                    # Só aceita ações da B3 (exchange SAO), tipo EQUITY
+                    if exchange != 'SAO' or quote_type != 'EQUITY':
+                        continue
+                    if not symbol.endswith('.SA'):
+                        continue
+                    base = symbol.replace('.SA', '')
+                    # Aceita apenas tickers puros: PETR4, BBAS3, VALE3, WEGE3
+                    # Rejeita fracionários (BBAS3F), leilão (BBAS3Q), etc.
+                    if not re.match(r'^[A-Z]{4}\d{1,2}$', base):
+                        continue
+                    display = base
+                    
+                elif category == "stocks_us":
+                    # Só aceita exchanges americanas
+                    us_exchanges = ['NYQ', 'NMS', 'NGM', 'PCX', 'BTS', 'ASE']
+                    if exchange not in us_exchanges:
+                        continue
+                    if quote_type != 'EQUITY':
+                        continue
+                    display = symbol
+                    
+                elif category == "crypto":
+                    # Só aceita criptomoedas
+                    if quote_type != 'CRYPTOCURRENCY':
+                        continue
+                    # Remove o par -USD, -BRL etc., mostra só o símbolo base
+                    display = symbol.split('-')[0] if '-' in symbol else symbol
+                    # Evita duplicatas (SOL-USD e SOL-BRL geram o mesmo display "SOL")
+                    if any(r['symbol'] == display for r in results):
+                        continue
+                    # Sobrescreve o search_symbol para usar BRL
+                    symbol = f"{display}-BRL"
+                    name = name.replace(' USD', '').replace(' BRL', '').strip()
+                    
+                elif category == "fii":
+                    # FIIs são da B3, exchange SAO, geralmente terminam em 11
+                    if exchange != 'SAO':
+                        continue
+                    if not symbol.endswith('.SA'):
+                        continue
+                    base = symbol.replace('.SA', '')
+                    # FIIs tipicamente terminam em 11 (MXRF11, HGLG11, etc.)
+                    if not re.match(r'^[A-Z]{4}11$', base):
+                        continue
+                    display = base
+                else:
+                    display = symbol
+
+                results.append({
+                    "symbol": display,
+                    "search_symbol": symbol,
+                    "name": name,
+                    "type": quote_type,
+                    "exchange": exchange
+                })
+                
+                if len(results) >= 5:
+                    break
+                    
+        return {"results": results}
     except Exception as e:
         return {"error": str(e)}
 

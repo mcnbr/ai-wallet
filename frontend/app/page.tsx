@@ -69,7 +69,7 @@ export default function Home() {
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const res = await fetch(`http://localhost:8000/api/stock/search?query=${formData.symbol}`);
+        const res = await fetch(`http://localhost:8000/api/stock/search?query=${formData.symbol}&category=${formData.category}`);
         const data = await res.json();
         if (data.results) {
           setSearchResults(data.results);
@@ -82,7 +82,7 @@ export default function Home() {
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [formData.symbol, transactionStep]);
+  }, [formData.symbol, formData.category, transactionStep]);
 
   const handleValidationStep = async () => {
     if (!formData.symbol) return setValidationError("Ticker obrigatório");
