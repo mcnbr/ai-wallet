@@ -6,6 +6,8 @@ psycopg2-binary
 yfinance
 python-dotenv
 langchain-openai
+langchain
+langchain-community
 duckduckgo-search
 httpx
 google-api-python-client

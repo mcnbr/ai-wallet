@@ -11,8 +11,10 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
-from langchain.agents import AgentType, initialize_agent
-from langchain_community.tools import DuckDuckGoSearchRun
+try:
+    from langchain_classic.agents import AgentType, initialize_agent
+except ImportError:
+    from langchain.agents import AgentType, initialize_agent
 
 # Drive Sync
 from drive_sync import upload_to_drive
@@ -23,7 +25,7 @@ import shutil
 load_dotenv()
 
 # Configuration
-LM_STUDIO_URL = os.getenv("LM_STUDIO_URL", "http://localhost:1234/v1")
+LM_STUDIO_URL = os.getenv("LM_STUDIO_URL", "http://127.0.0.1:1234/v1")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./carteira.db")
 
 # Database Setup
@@ -43,7 +45,7 @@ class Asset(Base):
     name = Column(String)
     quantity = Column(Float)
     average_price = Column(Float)
-    type = Column(String) # stocks, crypto, fii, fixed_income
+    category = Column(String, default="stocks") # stocks, crypto, fii, fixed_income
 
 class Transaction(Base):
     __tablename__ = "transactions"
@@ -53,9 +55,43 @@ class Transaction(Base):
     quantity = Column(Float)
     price = Column(Float)
     fees = Column(Float, default=0.0)
+    category = Column(String, default="stocks")
     date = Column(DateTime, default=datetime.datetime.utcnow)
 
+# Additional Imports for Analysis
+import yfinance as yf
+import pandas as pd
+
 # AI Tools
+@tool
+def get_stock_price(ticker: str) -> str:
+    """Obtém o preço atual e dados básicos de uma ação na B3 (use o sufixo .SA, ex: PETR4.SA) ou EUA."""
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        current_price = info.get('currentPrice', info.get('regularMarketPrice', 'N/A'))
+        return f"Preço de {ticker}: R$ {current_price} (Setor: {info.get('sector', 'N/A')})"
+    except Exception as e:
+        return f"Erro ao buscar preço de {ticker}: {str(e)}"
+
+@tool
+def get_technical_indicators(ticker: str) -> str:
+    """Calcula indicadores técnicos básicos (SMA 20, SMA 50) para uma ação."""
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="3mo")
+        hist['SMA_20'] = hist['Close'].rolling(window=20).mean()
+        hist['SMA_50'] = hist['Close'].rolling(window=50).mean()
+        
+        last_close = hist['Close'].iloc[-1]
+        sma_20 = hist['SMA_20'].iloc[-1]
+        sma_50 = hist['SMA_50'].iloc[-1]
+        
+        trend = "Bullish" if last_close > sma_20 and sma_20 > sma_50 else "Bearish" if last_close < sma_20 and sma_20 < sma_50 else "Neutral"
+        return f"{ticker} Análise Técnica: Fechamento={last_close:.2f}, SMA20={sma_20:.2f}, SMA50={sma_50:.2f}. Tendência: {trend}"
+    except Exception as e:
+        return f"Erro ao calcular indicadores para {ticker}: {str(e)}"
+
 @tool
 def add_asset_tool(symbol: str, quantity: float, price: float, asset_type: str):
     """Adiciona um novo ativo ou atualiza a quantidade e preço médio de um existente."""
@@ -83,13 +119,7 @@ def get_portfolio_summary():
     """Retorna um resumo de todos os ativos na carteira."""
     return "Sua carteira atual: 100 PETR4 (R$ 35,50), 0.5 BTC (R$ 350.000,00), R$ 10.000,00 Tesouro Selic."
 
-search = DuckDuckGoSearchRun()
-@tool
-def investment_research_tool(query: str):
-    """Pesquisa na internet sobre ativos financeiros, resultados trimestrais e notícias de mercado."""
-    return search.run(query)
-
-tools = [add_asset_tool, get_portfolio_summary, investment_research_tool]
+tools = [add_asset_tool, get_portfolio_summary, get_stock_price, get_technical_indicators]
 
 # Initialize LLM
 llm = ChatOpenAI(
@@ -103,7 +133,7 @@ llm = ChatOpenAI(
 agent = initialize_agent(
     tools, 
     llm, 
-    agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
+    agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
     verbose=True,
     handle_parsing_errors=True
 )
@@ -140,7 +170,7 @@ async def ask_ai(question: str, base_url: str = None):
         current_agent = initialize_agent(
             tools, 
             current_llm, 
-            agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
+            agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
             verbose=True,
             handle_parsing_errors=True
         )
@@ -151,16 +181,25 @@ async def ask_ai(question: str, base_url: str = None):
         return {"error": str(e)}
 
 @app.post("/transactions/add")
-async def add_transaction(symbol: str, quantity: float, price: float, type: str, fees: float = 0.0):
+async def add_transaction(symbol: str, quantity: float, price: float, type: str, category: str = "stocks", date: str = None, fees: float = 0.0):
     """Manually adds a transaction to the database."""
     db = SessionLocal()
     try:
+        # Parse date if provided
+        tx_date = datetime.datetime.utcnow()
+        if date:
+            try:
+                tx_date = datetime.datetime.fromisoformat(date)
+            except ValueError:
+                pass
+
         # Update or create Asset
         asset = db.query(Asset).filter(Asset.symbol == symbol.upper()).first()
         if not asset:
-            asset = Asset(symbol=symbol.upper(), quantity=quantity, average_price=price, type="stocks")
+            asset = Asset(symbol=symbol.upper(), quantity=quantity, average_price=price, category=category)
             db.add(asset)
         else:
+            asset.category = category # Update category if it changed
             if type.lower() == "buy":
                 new_quantity = asset.quantity + quantity
                 # Net price including fees for average price calculation
@@ -171,7 +210,7 @@ async def add_transaction(symbol: str, quantity: float, price: float, type: str,
                 asset.quantity -= quantity
         
         # Log Transaction
-        transaction = Transaction(asset_id=asset.id, type=type, quantity=quantity, price=price, fees=fees)
+        transaction = Transaction(asset_id=asset.id, type=type, quantity=quantity, price=price, fees=fees, category=category, date=tx_date)
         db.add(transaction)
         db.commit()
         return {"status": "success"}
@@ -179,6 +218,39 @@ async def add_transaction(symbol: str, quantity: float, price: float, type: str,
         return {"error": str(e)}
     finally:
         db.close()
+
+@app.get("/api/stock/validate")
+async def validate_stock(symbol: str):
+    """Verifica se um ticker existe e retorna o nome da empresa correspondente."""
+    try:
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        if 'shortName' in info or 'longName' in info:
+            name = info.get('shortName', info.get('longName', symbol))
+            return {"valid": True, "symbol": symbol, "name": name, "currency": info.get('currency', 'BRL')}
+        return {"valid": False, "error": "Ticker não encontrado."}
+    except Exception as e:
+        return {"valid": False, "error": str(e)}
+
+@app.get("/api/stock/historical")
+async def get_historical_price(symbol: str, date: str):
+    """Retorna o preço de fechamento ajustado de um ativo em uma data específica."""
+    try:
+        # Tenta pegar um intervalo curto que inclua a data
+        target_date = datetime.datetime.strptime(date, "%Y-%m-%d")
+        end_date = target_date + datetime.timedelta(days=5) # Margem para fds/feriado
+        
+        ticker = yf.Ticker(symbol)
+        history = ticker.history(start=target_date.strftime("%Y-%m-%d"), end=end_date.strftime("%Y-%m-%d"))
+        
+        if not history.empty:
+            closing_price = float(history['Close'].iloc[0])
+            actual_date = history.index[0].strftime("%Y-%m-%d")
+            return {"symbol": symbol, "price": closing_price, "date": actual_date}
+        else:
+            return {"error": "Cotação não encontrada para esta data."}
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.post("/sync")
 async def sync_database(access_token: str):

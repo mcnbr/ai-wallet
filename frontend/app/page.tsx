@@ -18,7 +18,13 @@ import {
   CloudUpload,
   Settings,
   Globe,
-  Server
+  Server,
+  Activity,
+  DollarSign,
+  Briefcase,
+  LineChart,
+  List,
+  FileBadge
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect } from "react";
@@ -31,13 +37,64 @@ export default function Home() {
   const [aiEnabled, setAiEnabled] = useState(true);
   const [showManualModal, setShowManualModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [formData, setFormData] = useState({ symbol: "", quantity: "", price: "", fees: "", type: "BUY" });
+  const [activeTab, setActiveTab] = useState("resumo");
+  const [formData, setFormData] = useState({ 
+    symbol: "", 
+    quantity: "", 
+    price: "", 
+    fees: "", 
+    category: "stocks", 
+    date: new Date().toISOString().split('T')[0],
+    type: "buy" 
+  });
   
+  // Transaction Wizard State
+  const [transactionStep, setTransactionStep] = useState(1);
+  const [isFetchingPrice, setIsFetchingPrice] = useState(false);
+  const [validationError, setValidationError] = useState("");
+
+  const handleValidationStep = async () => {
+    if (!formData.symbol) return setValidationError("Ticker obrigatório");
+    setLoading(true);
+    try {
+      const res = await fetch(`http://localhost:8000/api/stock/validate?symbol=${formData.symbol}`);
+      const data = await res.json();
+      if (data.valid) {
+        setValidationError("");
+        setTransactionStep(2);
+      } else {
+        setValidationError("Ticker não encontrado");
+      }
+    } catch (error) {
+      setValidationError("Erro ao validar ticker");
+    }
+    setLoading(false);
+  };
+
+  const handleDateStep = async () => {
+    if (!formData.date) return setValidationError("Data obrigatória");
+    setIsFetchingPrice(true);
+    try {
+      const res = await fetch(`http://localhost:8000/api/stock/historical?symbol=${formData.symbol}&date=${formData.date}`);
+      const data = await res.json();
+      if (data.price) {
+        setFormData(prev => ({ ...prev, price: data.price.toFixed(2) }));
+        setValidationError("");
+        setTransactionStep(3);
+      } else {
+        setValidationError("Sem cotação para a data");
+      }
+    } catch (error) {
+      setValidationError("Erro ao buscar histórico");
+    }
+    setIsFetchingPrice(false);
+  };
+
   // App Settings State
   const [appSettings, setAppSettings] = useState({
     walletName: "AI WALLET",
     language: "pt-br",
-    lmStudioUrl: "http://localhost:1234/v1"
+    lmStudioUrl: "http://127.0.0.1:1234/v1"
   });
 
   // Load settings on mount
@@ -72,12 +129,33 @@ export default function Home() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/transactions/add?symbol=${formData.symbol}&quantity=${formData.quantity}&price=${formData.price}&type=${formData.type}&fees=${formData.fees || 0}`, {
-        method: "POST"
-      });
+      const payload = {
+        symbol: formData.symbol,
+        quantity: parseFloat(formData.quantity),
+        price: parseFloat(formData.price),
+        type: formData.type,
+        category: formData.category,
+        date: formData.date,
+        fees: formData.fees ? parseFloat(formData.fees) : 0.0
+      };
+      const res = await fetch(`http://localhost:8000/transactions/add?${new URLSearchParams(payload as any)}`, { method: "POST" });
       if (res.ok) {
+        // Trigger auto-sync
+        if (session?.accessToken) {
+            fetch(`http://localhost:8000/sync?access_token=${session.accessToken}`, { method: "POST" }).catch(console.error);
+        }
         setShowManualModal(false);
-        setFormData({ symbol: "", quantity: "", price: "", fees: "", type: "BUY" });
+        setFormData({ 
+          symbol: "", 
+          quantity: "", 
+          price: "", 
+          fees: "", 
+          category: "stocks", 
+          date: new Date().toISOString().split('T')[0],
+          type: "buy" 
+        });
+        setTransactionStep(1);
+        alert("Ativo adicionado e sincronização com Google Drive iniciada!");
       }
     } catch (err) {
       console.error(err);
@@ -191,10 +269,37 @@ export default function Home() {
           </div>
         </header>
 
+        {/* --- TABS NAVIGATION --- */}
+        <div className="flex overflow-x-auto gap-2 pb-4 mb-8 custom-scrollbar scroll-smooth">
+          {[
+            { id: "resumo", label: "Resumo", icon: <TrendingUp className="w-4 h-4" /> },
+            { id: "proventos", label: "Proventos", icon: <DollarSign className="w-4 h-4" /> },
+            { id: "patrimonio", label: "Patrimônio", icon: <Briefcase className="w-4 h-4" /> },
+            { id: "rentabilidade", label: "Rentabilidade", icon: <LineChart className="w-4 h-4" /> },
+            { id: "lancamentos", label: "Lançamentos", icon: <List className="w-4 h-4" /> },
+            { id: "irpf", label: "IRPF", icon: <FileBadge className="w-4 h-4" /> },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm whitespace-nowrap transition-all ${
+                activeTab === tab.id
+                  ? "bg-primary text-white shadow-lg shadow-primary/20"
+                  : "glass text-gray-400 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Main Dashboard */}
+          {/* Main Dashboard Content Area */}
           <div className="lg:col-span-8 space-y-8">
-            {/* Portfolio Summary Card */}
+            
+            {activeTab === "resumo" && (
+              <>
+                {/* Portfolio Summary Card */}
             <div className="glass-card flex flex-col md:flex-row gap-8 items-center lg:items-stretch">
               <div className="flex-1 space-y-4">
                 <div className="flex items-center gap-2 text-gray-400">
@@ -235,6 +340,221 @@ export default function Home() {
                 </div>
               ))}
             </div>
+            </>
+            )}
+
+            {activeTab === "proventos" && (
+              <div className="space-y-6">
+                <div className="glass-card flex items-center justify-between p-6">
+                  <div>
+                    <h3 className="text-gray-400 text-xs font-bold uppercase tracking-widest">Total Recebido (2024)</h3>
+                    <p className="text-3xl font-black mt-1">R$ 1.250,00</p>
+                  </div>
+                  <DollarSign className="w-10 h-10 text-green-400 opacity-50" />
+                </div>
+                
+                <div className="glass-card p-6 min-h-[300px] flex flex-col justify-center items-center text-gray-500">
+                  <div className="w-full mb-4 flex justify-between items-center">
+                    <h4 className="font-bold text-white">Evolução de Proventos</h4>
+                    <span className="text-xs bg-white/10 px-3 py-1 rounded-full">Mensal</span>
+                  </div>
+                  <div className="flex-1 w-full flex items-end justify-between gap-2 pt-4 border-t border-white/10">
+                    {/* Mock Bar Chart */}
+                    {[10, 25, 40, 30, 60, 45, 80, 50, 90, 70, 110, 100].map((h, i) => (
+                      <div key={i} className="w-full flex flex-col items-center gap-2 group">
+                        <div className="w-full bg-primary/40 hover:bg-primary rounded-t-sm transition-all relative" style={{ height: `${h}px` }}>
+                          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                            R$ {h * 1.5}
+                          </div>
+                        </div>
+                        <span className="text-[8px] text-gray-500">{['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][i]}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="glass-card p-6">
+                  <h4 className="font-bold text-white mb-4">Últimos Pagamentos</h4>
+                  <div className="space-y-3">
+                    {[
+                      { ticker: "PETR4", type: "Dividendo", amount: "R$ 45,00", date: "15 Mai 2024" },
+                      { ticker: "MXRF11", type: "Rendimento", amount: "R$ 12,50", date: "14 Mai 2024" },
+                      { ticker: "BBAS3", type: "JCP", amount: "R$ 30,00", date: "02 Mai 2024" }
+                    ].map((item, i) => (
+                      <div key={i} className="flex justify-between items-center p-3 hover:bg-white/5 rounded-xl transition-all border border-transparent hover:border-white/10 cursor-pointer">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-black text-xs text-primary">{item.ticker.substring(0,4)}</div>
+                          <div>
+                            <p className="font-bold text-sm">{item.ticker}</p>
+                            <p className="text-xs text-gray-400">{item.type}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-green-400">{item.amount}</p>
+                          <p className="text-xs text-gray-500">{item.date}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "patrimonio" && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="glass-card p-6 flex flex-col justify-center items-center">
+                    <Briefcase className="w-12 h-12 text-primary opacity-50 mb-4" />
+                    <h3 className="text-gray-400 text-xs font-bold uppercase tracking-widest">Custo Total</h3>
+                    <p className="text-2xl font-black mt-1">R$ 40.000,00</p>
+                  </div>
+                  <div className="glass-card p-6 flex flex-col justify-center items-center">
+                    <TrendingUp className="w-12 h-12 text-green-400 opacity-50 mb-4" />
+                    <h3 className="text-gray-400 text-xs font-bold uppercase tracking-widest">Lucro Aberto</h3>
+                    <p className="text-2xl font-black mt-1 text-green-400">+ R$ 4.550,00</p>
+                  </div>
+                </div>
+
+                <div className="glass-card p-0 overflow-hidden">
+                  <div className="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
+                    <h4 className="font-bold text-white">Meus Ativos</h4>
+                    <button className="text-xs bg-primary px-3 py-1.5 rounded-lg font-bold hover:bg-primary/80 transition-all flex items-center gap-1">
+                      <Plus className="w-3 h-3"/> Novo Ativo
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead className="text-xs text-gray-400 uppercase bg-black/20 font-black">
+                        <tr>
+                          <th className="px-6 py-4">Ativo</th>
+                          <th className="px-6 py-4">Preço Médio</th>
+                          <th className="px-6 py-4">Qtd.</th>
+                          <th className="px-6 py-4">Total</th>
+                          <th className="px-6 py-4 text-right">Rentabilidade</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          { ticker: "PETR4", name: "Petrobras", pm: "30,00", qty: "100", total: "3.500,00", rent: "+16.6%" },
+                          { ticker: "WEGE3", name: "WEG", pm: "35,00", qty: "50", total: "1.900,00", rent: "+8.5%" },
+                          { ticker: "MXRF11", name: "Maxi Renda", pm: "10,20", qty: "300", total: "3.150,00", rent: "+2.9%" },
+                          { ticker: "BTC", name: "Bitcoin", pm: "300.000", qty: "0.01", total: "4.350,00", rent: "+45.0%" },
+                        ].map((row, i) => (
+                          <tr key={i} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                            <td className="px-6 py-4 font-bold">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-[10px]">{row.ticker.substring(0,1)}</div>
+                                <div>
+                                  <div>{row.ticker}</div>
+                                  <div className="text-xs text-gray-500 font-normal">{row.name}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">R$ {row.pm}</td>
+                            <td className="px-6 py-4">{row.qty}</td>
+                            <td className="px-6 py-4 font-bold">R$ {row.total}</td>
+                            <td className={`px-6 py-4 text-right font-bold ${row.rent.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}>
+                              {row.rent}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "rentabilidade" && (
+              <div className="space-y-6">
+                <div className="glass-card flex items-center justify-between p-6">
+                  <div>
+                    <h3 className="text-gray-400 text-xs font-bold uppercase tracking-widest">Rentabilidade da Carteira</h3>
+                    <p className="text-3xl font-black mt-1 text-green-400">+ 15.4%</p>
+                  </div>
+                  <LineChart className="w-10 h-10 text-green-400 opacity-50" />
+                </div>
+                
+                <div className="glass-card p-6 min-h-[300px] flex flex-col justify-center items-center text-gray-500">
+                  <div className="w-full mb-4 flex justify-between items-center">
+                    <h4 className="font-bold text-white">Carteira x IBOV x CDI</h4>
+                  </div>
+                  <div className="flex-1 w-full h-[200px] bg-white/5 rounded-xl border border-white/10 flex items-center justify-center">
+                    {/* Placeholder for actual multi-line chart */}
+                    <p className="text-xs">Gráfico Comparativo (Carteira em Verde, IBOV em Azul, CDI em Amarelo)</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "lancamentos" && (
+              <div className="glass-card p-0 overflow-hidden">
+                <div className="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
+                  <h4 className="font-bold text-white">Histórico de Lançamentos</h4>
+                  <div className="flex gap-2">
+                    <button className="text-xs glass px-3 py-1.5 rounded-lg hover:bg-white/10 transition-all flex items-center gap-2">
+                       Filtrar <TrendingUp className="w-3 h-3"/>
+                    </button>
+                    <button 
+                      onClick={() => setShowManualModal(true)}
+                      className="text-xs bg-primary px-3 py-1.5 rounded-lg font-bold hover:bg-primary/80 transition-all flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3"/> Novo
+                    </button>
+                  </div>
+                </div>
+                <div className="divide-y divide-white/5">
+                  {[
+                    { type: "Compra", asset: "PETR4", qty: "100", price: "R$ 35,00", date: "10 Mai 2024", total: "R$ -3.500,00" },
+                    { type: "Venda", asset: "WEGE3", qty: "50", price: "R$ 40,00", date: "05 Mai 2024", total: "R$ +2.000,00" },
+                    { type: "Compra", asset: "BTC", qty: "0.01", price: "R$ 300.000", date: "01 Mai 2024", total: "R$ -3.000,00" },
+                  ].map((tx, i) => (
+                    <div key={i} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 hover:bg-white/5 transition-colors">
+                      <div className="flex items-center gap-4 mb-2 sm:mb-0">
+                        <div className={`w-2 h-10 rounded-full ${tx.type === 'Compra' ? 'bg-primary' : 'bg-orange-500'}`} />
+                        <div>
+                          <p className="font-bold text-sm flex items-center gap-2">
+                            {tx.asset} <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-gray-400 font-normal">{tx.type}</span>
+                          </p>
+                          <p className="text-xs text-gray-500">{tx.date} • {tx.qty} cotas a {tx.price}</p>
+                        </div>
+                      </div>
+                      <p className={`font-bold ${tx.type === 'Compra' ? 'text-white' : 'text-green-400'}`}>
+                        {tx.total}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "irpf" && (
+              <div className="space-y-6">
+                <div className="glass-card flex items-center justify-between p-6">
+                  <div>
+                    <h3 className="text-gray-400 text-xs font-bold uppercase tracking-widest">Ano Base</h3>
+                    <select className="bg-transparent text-xl font-black mt-1 text-white outline-none">
+                      <option>2023</option>
+                      <option>2022</option>
+                    </select>
+                  </div>
+                  <FileBadge className="w-10 h-10 text-blue-400 opacity-50" />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="glass-card p-6 border border-blue-500/30 bg-blue-500/5">
+                    <h4 className="font-bold text-blue-400 mb-2">Bens e Direitos</h4>
+                    <p className="text-xs text-gray-400 mb-4">Resumo da sua posição acionária no último dia do ano para declaração.</p>
+                    <button className="text-xs bg-blue-600 px-4 py-2 rounded-lg font-bold hover:bg-blue-500 transition-all w-full">Ver Relatório</button>
+                  </div>
+                  <div className="glass-card p-6 border border-green-500/30 bg-green-500/5">
+                    <h4 className="font-bold text-green-400 mb-2">Rendimentos Isentos</h4>
+                    <p className="text-xs text-gray-400 mb-4">Total de dividendos e rendimentos isentos recebidos no ano.</p>
+                    <button className="text-xs bg-green-600 px-4 py-2 rounded-lg font-bold hover:bg-green-500 transition-all w-full">Ver Relatório</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* AI Sidepanel */}
@@ -314,56 +634,173 @@ export default function Home() {
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
               className="relative glass-card max-w-md w-full !p-8 animate-neon-glow"
             >
-              <h3 className="text-3xl font-black mb-8 tracking-tighter">Lançamento de Ativo</h3>
-              <form className="space-y-6" onSubmit={handleManualSubmit}>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Símbolo do Ativo</label>
-                  <input 
-                    type="text" 
-                    value={formData.symbol}
-                    onChange={(e) => setFormData({...formData, symbol: e.target.value})}
-                    placeholder="Ex: PETR4, BTC, AAPL" 
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary uppercase font-bold" 
-                  />
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-3xl font-black tracking-tighter">Lançamento de Ativo</h3>
+                <div className="flex gap-1">
+                  {[1, 2, 3].map(step => (
+                     <div key={step} className={`h-2 w-8 rounded-full ${transactionStep >= step ? 'bg-primary' : 'bg-white/10'}`} />
+                  ))}
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+              </div>
+
+              {validationError && (
+                <div className="bg-red-500/20 text-red-400 p-3 rounded-xl text-xs font-bold mb-6 text-center border border-red-500/30">
+                  {validationError}
+                </div>
+              )}
+
+              {transactionStep === 1 && (
+                <div className="space-y-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Qtd.</label>
-                    <input 
-                      type="number" step="any" 
-                      value={formData.quantity}
-                      onChange={(e) => setFormData({...formData, quantity: e.target.value})}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-sm" 
-                    />
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Categoria</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[ 
+                        { id: 'stocks', label: 'Ações B3' },
+                        { id: 'stocks_us', label: 'Stocks US' },
+                        { id: 'crypto', label: 'Cripto' },
+                        { id: 'fii', label: 'FIIs' }
+                      ].map(cat => (
+                        <button
+                          key={cat.id}
+                          onClick={() => setFormData({...formData, category: cat.id})}
+                          className={`p-4 rounded-2xl text-sm font-bold border transition-all ${
+                            formData.category === cat.id 
+                            ? 'bg-primary/20 border-primary text-white scale-[1.02]' 
+                            : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                          }`}
+                        >
+                          {cat.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Preço</label>
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Símbolo do Ativo</label>
                     <input 
-                      type="number" step="any" 
-                      value={formData.price}
-                      onChange={(e) => setFormData({...formData, price: e.target.value})}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-sm" 
+                      type="text" 
+                      value={formData.symbol}
+                      onChange={(e) => setFormData({...formData, symbol: e.target.value.toUpperCase()})}
+                      placeholder="Ex: PETR4, BTC-USD, AAPL" 
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary uppercase font-bold text-center text-xl tracking-widest" 
                     />
                   </div>
+                  <button 
+                    onClick={handleValidationStep}
+                    disabled={loading || !formData.symbol}
+                    className="w-full bg-primary py-5 rounded-2xl font-black text-sm uppercase tracking-widest mt-4 shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+                  >
+                    {loading ? 'Validando...' : 'Próximo Passo'}
+                  </button>
+                </div>
+              )}
+
+              {transactionStep === 2 && (
+                <div className="space-y-6">
+                  <div className="bg-white/5 p-4 rounded-2xl text-center border border-white/10">
+                    <p className="text-xs text-gray-400 uppercase tracking-widest">Ativo Selecionado</p>
+                    <p className="text-xl font-black text-white mt-1">{formData.symbol}</p>
+                  </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Taxas</label>
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Data da Operação</label>
                     <input 
-                      type="number" step="any" 
-                      value={formData.fees}
-                      onChange={(e) => setFormData({...formData, fees: e.target.value})}
-                      placeholder="0.00"
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-sm" 
+                      type="date" 
+                      value={formData.date}
+                      onChange={(e) => setFormData({...formData, date: e.target.value})}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-6 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-center text-xl" 
                     />
+                    <p className="text-xs text-gray-500 text-center mt-2">Buscaremos a cotação histórica desta data.</p>
+                  </div>
+                  <div className="flex gap-4">
+                    <button 
+                      onClick={() => setTransactionStep(1)}
+                      className="flex-1 bg-white/5 py-5 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-white/10 transition-all"
+                    >
+                      Voltar
+                    </button>
+                    <button 
+                      onClick={handleDateStep}
+                      disabled={isFetchingPrice}
+                      className="flex-[2] bg-primary py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+                    >
+                      {isFetchingPrice ? 'Buscando...' : 'Buscar Preço'}
+                    </button>
                   </div>
                 </div>
-                <button 
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-primary py-5 rounded-2xl font-black text-sm uppercase tracking-widest mt-4 shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
-                >
-                  Confirmar Lançamento
-                </button>
-              </form>
+              )}
+
+              {transactionStep === 3 && (
+                <form className="space-y-6" onSubmit={handleManualSubmit}>
+                  <div className="flex items-center gap-2 p-1 bg-white/5 rounded-xl mb-6">
+                     <button
+                        type="button"
+                        onClick={() => setFormData({...formData, type: "buy"})}
+                        className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${formData.type === "buy" ? "bg-primary text-white shadow" : "text-gray-400 hover:text-white"}`}
+                      >COMPRA</button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({...formData, type: "sell"})}
+                        className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${formData.type === "sell" ? "bg-orange-500 text-white shadow" : "text-gray-400 hover:text-white"}`}
+                      >VENDA</button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Qtd.</label>
+                      <input 
+                        type="number" step="any" 
+                        value={formData.quantity}
+                        onChange={(e) => setFormData({...formData, quantity: e.target.value})}
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-center text-xl" 
+                        autoFocus
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 flex justify-between">
+                        <span>Preço Obtido</span>
+                        <span className="text-gray-600">(Editável)</span>
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-500">R$</span>
+                        <input 
+                          type="number" step="any" 
+                          value={formData.price}
+                          onChange={(e) => setFormData({...formData, price: e.target.value})}
+                          className="w-full bg-primary/10 border border-primary/30 rounded-2xl pl-10 pr-4 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-xl text-primary" 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Despesas / Taxas (B3/Rede)</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-500">R$</span>
+                      <input 
+                        type="number" step="any" 
+                        value={formData.fees}
+                        onChange={(e) => setFormData({...formData, fees: e.target.value})}
+                        placeholder="0.00"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl pl-10 pr-4 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-sm" 
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-4 mt-6">
+                    <button 
+                      type="button"
+                      onClick={() => setTransactionStep(2)}
+                      className="flex-1 bg-white/5 py-5 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-white/10 transition-all cursor-pointer"
+                    >
+                      Voltar
+                    </button>
+                    <button 
+                      type="submit"
+                      disabled={loading || !formData.quantity || !formData.price}
+                      className="flex-[2] bg-primary py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      {loading ? 'Salvando...' : 'Confirmar & Sync'}
+                    </button>
+                  </div>
+                </form>
+              )}
             </motion.div>
           </div>
         )}
