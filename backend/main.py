@@ -248,11 +248,7 @@ async def search_stock(query: str, category: str = "stocks"):
     try:
         # Monta a query apropriada para cada categoria
         search_query = query
-        if category == "fii":
-            # Para FIIs, busca com .SA para encontrar fundos brasileiros
-            if not query.endswith(".SA"):
-                search_query = f"{query}.SA"
-        # Para stocks B3, busca sem .SA e filtra pela exchange SAO
+        # Para todas as categorias, busca sem sufixos e filtra no processamento dos resultados
 
         url = f"https://query2.finance.yahoo.com/v1/finance/search?q={search_query}&quotesCount=15"
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -308,16 +304,30 @@ async def search_stock(query: str, category: str = "stocks"):
                     name = name.replace(' USD', '').replace(' BRL', '').strip()
                     
                 elif category == "fii":
-                    # FIIs são da B3, exchange SAO, geralmente terminam em 11
+                    # FIIs na B3 costumam vir como EQUITY, mas o nome contém "FII"
                     if exchange != 'SAO':
                         continue
                     if not symbol.endswith('.SA'):
                         continue
-                    base = symbol.replace('.SA', '')
-                    # FIIs tipicamente terminam em 11 (MXRF11, HGLG11, etc.)
-                    if not re.match(r'^[A-Z]{4}11$', base):
+                    # Filtra por nome contendo FII ou padrãoXXXX11
+                    name_upper = name.upper()
+                    if "FII" not in name_upper and not re.match(r'^[A-Z]{4}11$', symbol.replace('.SA', '')):
                         continue
-                    display = base
+                    display = symbol.replace('.SA', '')
+                    
+                elif category == "etf":
+                    # ETFs podem ser tipo ETF ou EQUITY na B3
+                    if quote_type == 'ETF':
+                        display = symbol.replace('.SA', '') if exchange == 'SAO' else symbol
+                    elif exchange == 'SAO' and quote_type == 'EQUITY':
+                        base = symbol.replace('.SA', '')
+                        # ETFs de índice na B3 (BOVA11, IVVB11, etc.)
+                        if re.match(r'^[A-Z]{4}11$', base) and "FII" not in name.upper():
+                            display = base
+                        else:
+                            continue
+                    else:
+                        continue
                 else:
                     display = symbol
 

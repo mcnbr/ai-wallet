@@ -50,7 +50,6 @@ export default function Home() {
   
   // Transaction Wizard State
   const [transactionStep, setTransactionStep] = useState(1);
-  const [isFetchingPrice, setIsFetchingPrice] = useState(false);
   const [validationError, setValidationError] = useState("");
   
   // Autocomplete State
@@ -104,24 +103,7 @@ export default function Home() {
     setLoading(false);
   };
 
-  const handleDateStep = async () => {
-    if (!formData.date) return setValidationError("Data obrigatória");
-    setIsFetchingPrice(true);
-    try {
-      const res = await fetch(`http://localhost:8000/api/stock/historical?symbol=${formData.symbol}&date=${formData.date}`);
-      const data = await res.json();
-      if (data.price) {
-        setFormData(prev => ({ ...prev, price: data.price.toFixed(2) }));
-        setValidationError("");
-        setTransactionStep(3);
-      } else {
-        setValidationError("Sem cotação para a data");
-      }
-    } catch (error) {
-      setValidationError("Erro ao buscar histórico");
-    }
-    setIsFetchingPrice(false);
-  };
+
 
   // App Settings State
   const [appSettings, setAppSettings] = useState({
@@ -177,18 +159,7 @@ export default function Home() {
         if (session?.accessToken) {
             fetch(`http://localhost:8000/sync?access_token=${session.accessToken}`, { method: "POST" }).catch(console.error);
         }
-        setShowManualModal(false);
-        setFormData({ 
-          symbol: "", 
-          quantity: "", 
-          price: "", 
-          fees: "", 
-          category: "stocks", 
-          date: new Date().toISOString().split('T')[0],
-          type: "buy" 
-        });
-        setTransactionStep(1);
-        alert("Ativo adicionado e sincronização com Google Drive iniciada!");
+        setTransactionStep(3);
       }
     } catch (err) {
       console.error(err);
@@ -670,7 +641,7 @@ export default function Home() {
               <div className="flex items-center justify-between mb-8">
                 <h3 className="text-3xl font-black tracking-tighter">Lançamento de Ativo</h3>
                 <div className="flex gap-1">
-                  {[1, 2, 3].map(step => (
+                  {[1, 2].map(step => (
                      <div key={step} className={`h-2 w-8 rounded-full ${transactionStep >= step ? 'bg-primary' : 'bg-white/10'}`} />
                   ))}
                 </div>
@@ -686,26 +657,18 @@ export default function Home() {
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Categoria</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[ 
-                        { id: 'stocks', label: 'Ações B3' },
-                        { id: 'stocks_us', label: 'Stocks US' },
-                        { id: 'crypto', label: 'Cripto' },
-                        { id: 'fii', label: 'FIIs' }
-                      ].map(cat => (
-                        <button
-                          key={cat.id}
-                          onClick={() => setFormData({...formData, category: cat.id})}
-                          className={`p-4 rounded-2xl text-sm font-bold border transition-all ${
-                            formData.category === cat.id 
-                            ? 'bg-primary/20 border-primary text-white scale-[1.02]' 
-                            : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
-                          }`}
-                        >
-                          {cat.label}
-                        </button>
-                      ))}
-                    </div>
+                    <select
+                      value={formData.category}
+                      onChange={(e) => setFormData({...formData, category: e.target.value, symbol: ''})}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-sm text-white appearance-none cursor-pointer"
+                      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1rem center' }}
+                    >
+                      <option value="stocks" className="bg-[#0d0f17]">Ações B3</option>
+                      <option value="stocks_us" className="bg-[#0d0f17]">Stocks US</option>
+                      <option value="crypto" className="bg-[#0d0f17]">Cripto</option>
+                      <option value="fii" className="bg-[#0d0f17]">FIIs</option>
+                      <option value="etf" className="bg-[#0d0f17]">ETFs</option>
+                    </select>
                   </div>
                   <div className="space-y-2 relative">
                     <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Símbolo do Ativo</label>
@@ -715,7 +678,7 @@ export default function Home() {
                         value={formData.symbol}
                         onChange={(e) => setFormData({...formData, symbol: e.target.value.toUpperCase()})}
                         onFocus={() => { if(formData.symbol.length >= 2) setShowSuggestions(true); }}
-                        placeholder="Ex: PETR4, BTC-USD, AAPL" 
+                        placeholder="Ex: PETR4, BTC, AAPL" 
                         className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary uppercase font-bold text-center text-xl tracking-widest relative z-10" 
                       />
                       {isSearching && (
@@ -765,42 +728,13 @@ export default function Home() {
               )}
 
               {transactionStep === 2 && (
-                <div className="space-y-6">
-                  <div className="bg-white/5 p-4 rounded-2xl text-center border border-white/10">
-                    <p className="text-xs text-gray-400 uppercase tracking-widest">Ativo Selecionado</p>
-                    <p className="text-xl font-black text-white mt-1">{formData.symbol}</p>
+                <form className="space-y-5" onSubmit={handleManualSubmit}>
+                  <div className="bg-white/5 p-3 rounded-2xl text-center border border-white/10">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-widest">Ativo Selecionado</p>
+                    <p className="text-lg font-black text-white mt-0.5">{formData.symbol}</p>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Data da Operação</label>
-                    <input 
-                      type="date" 
-                      value={formData.date}
-                      onChange={(e) => setFormData({...formData, date: e.target.value})}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-6 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-center text-xl" 
-                    />
-                    <p className="text-xs text-gray-500 text-center mt-2">Buscaremos a cotação histórica desta data.</p>
-                  </div>
-                  <div className="flex gap-4">
-                    <button 
-                      onClick={() => setTransactionStep(1)}
-                      className="flex-1 bg-white/5 py-5 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-white/10 transition-all"
-                    >
-                      Voltar
-                    </button>
-                    <button 
-                      onClick={handleDateStep}
-                      disabled={isFetchingPrice}
-                      className="flex-[2] bg-primary py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
-                    >
-                      {isFetchingPrice ? 'Buscando...' : 'Buscar Preço'}
-                    </button>
-                  </div>
-                </div>
-              )}
 
-              {transactionStep === 3 && (
-                <form className="space-y-6" onSubmit={handleManualSubmit}>
-                  <div className="flex items-center gap-2 p-1 bg-white/5 rounded-xl mb-6">
+                  <div className="flex items-center gap-2 p-1 bg-white/5 rounded-xl">
                      <button
                         type="button"
                         onClick={() => setFormData({...formData, type: "buy"})}
@@ -813,35 +747,45 @@ export default function Home() {
                       >VENDA</button>
                   </div>
 
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Data da Operação</label>
+                    <input 
+                      type="date" 
+                      value={formData.date}
+                      onChange={(e) => setFormData({...formData, date: e.target.value})}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-center text-lg" 
+                    />
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Qtd.</label>
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Quantidade</label>
                       <input 
                         type="number" step="any" 
                         value={formData.quantity}
                         onChange={(e) => setFormData({...formData, quantity: e.target.value})}
+                        placeholder="0"
                         className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-center text-xl" 
                         autoFocus
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 flex justify-between">
-                        <span>Preço Obtido</span>
-                        <span className="text-gray-600">(Editável)</span>
-                      </label>
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Preço Unitário</label>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-500">R$</span>
                         <input 
                           type="number" step="any" 
                           value={formData.price}
                           onChange={(e) => setFormData({...formData, price: e.target.value})}
-                          className="w-full bg-primary/10 border border-primary/30 rounded-2xl pl-10 pr-4 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-xl text-primary" 
+                          placeholder="0.00"
+                          className="w-full bg-white/5 border border-white/10 rounded-2xl pl-10 pr-4 py-4 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-xl" 
                         />
                       </div>
                     </div>
                   </div>
+
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Despesas / Taxas (B3/Rede)</label>
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Taxas / Emolumentos</label>
                     <div className="relative">
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-500">R$</span>
                       <input 
@@ -853,23 +797,64 @@ export default function Home() {
                       />
                     </div>
                   </div>
-                  <div className="flex gap-4 mt-6">
+
+                  <div className="flex gap-4 mt-4">
                     <button 
                       type="button"
-                      onClick={() => setTransactionStep(2)}
-                      className="flex-1 bg-white/5 py-5 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-white/10 transition-all cursor-pointer"
+                      onClick={() => setTransactionStep(1)}
+                      className="flex-1 bg-white/5 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-white/10 transition-all cursor-pointer"
                     >
                       Voltar
                     </button>
                     <button 
                       type="submit"
                       disabled={loading || !formData.quantity || !formData.price}
-                      className="flex-[2] bg-primary py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer"
+                      className="flex-[2] bg-primary py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer"
                     >
-                      {loading ? 'Salvando...' : 'Confirmar & Sync'}
+                      {loading ? 'Salvando...' : 'Confirmar Lançamento'}
                     </button>
                   </div>
                 </form>
+              )}
+
+              {/* Success Screen */}
+              {transactionStep === 3 && (
+                <div className="space-y-8 text-center">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-green-500/20 border-2 border-green-500 flex items-center justify-center">
+                      <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h4 className="text-xl font-black text-white">Lançamento Registrado!</h4>
+                      <p className="text-sm text-gray-400 mt-1">Operação salva com sucesso.</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <button 
+                      onClick={() => {
+                        setFormData({ symbol: '', quantity: '', price: '', fees: '', category: formData.category, date: new Date().toISOString().split('T')[0], type: 'buy' });
+                        setTransactionStep(1);
+                        setValidationError('');
+                      }}
+                      className="w-full bg-primary py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                    >
+                      Lançar Nova Ordem
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setShowManualModal(false);
+                        setTransactionStep(1);
+                        setFormData({ symbol: '', quantity: '', price: '', fees: '', category: 'stocks', date: new Date().toISOString().split('T')[0], type: 'buy' });
+                        setValidationError('');
+                      }}
+                      className="w-full bg-white/5 py-5 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-white/10 transition-all cursor-pointer text-gray-400"
+                    >
+                      Fechar Lançamento
+                    </button>
+                  </div>
+                </div>
               )}
             </motion.div>
           </div>
