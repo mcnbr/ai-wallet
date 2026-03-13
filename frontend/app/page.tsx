@@ -52,15 +52,48 @@ export default function Home() {
   const [transactionStep, setTransactionStep] = useState(1);
   const [isFetchingPrice, setIsFetchingPrice] = useState(false);
   const [validationError, setValidationError] = useState("");
+  
+  // Autocomplete State
+  const [searchResults, setSearchResults] = useState<{symbol: string, search_symbol: string, name: string, type?: string}[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Ticker search debounce
+  useEffect(() => {
+    if (transactionStep !== 1 || !formData.symbol || formData.symbol.length < 2) {
+      setSearchResults([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await fetch(`http://localhost:8000/api/stock/search?query=${formData.symbol}`);
+        const data = await res.json();
+        if (data.results) {
+          setSearchResults(data.results);
+          setShowSuggestions(true);
+        }
+      } catch (e) {
+        console.error("Error searching ticker", e);
+      }
+      setIsSearching(false);
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [formData.symbol, transactionStep]);
 
   const handleValidationStep = async () => {
     if (!formData.symbol) return setValidationError("Ticker obrigatório");
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/stock/validate?symbol=${formData.symbol}`);
+      const res = await fetch(`http://localhost:8000/api/stock/validate?symbol=${formData.symbol}&category=${formData.category}`);
       const data = await res.json();
       if (data.valid) {
         setValidationError("");
+        // Salva o search_symbol (.SA) caso seja B3 para buscar a cotação correta
+        setFormData(prev => ({...prev, symbol: data.search_symbol || data.symbol}));
         setTransactionStep(2);
       } else {
         setValidationError("Ticker não encontrado");
@@ -674,15 +707,52 @@ export default function Home() {
                       ))}
                     </div>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 relative">
                     <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Símbolo do Ativo</label>
-                    <input 
-                      type="text" 
-                      value={formData.symbol}
-                      onChange={(e) => setFormData({...formData, symbol: e.target.value.toUpperCase()})}
-                      placeholder="Ex: PETR4, BTC-USD, AAPL" 
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary uppercase font-bold text-center text-xl tracking-widest" 
-                    />
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        value={formData.symbol}
+                        onChange={(e) => setFormData({...formData, symbol: e.target.value.toUpperCase()})}
+                        onFocus={() => { if(formData.symbol.length >= 2) setShowSuggestions(true); }}
+                        placeholder="Ex: PETR4, BTC-USD, AAPL" 
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-1 focus:ring-primary uppercase font-bold text-center text-xl tracking-widest relative z-10" 
+                      />
+                      {isSearching && (
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 z-20">
+                          <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Autocomplete Dropdown */}
+                    <AnimatePresence>
+                      {showSuggestions && searchResults.length > 0 && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="absolute w-full mt-2 bg-[#1a1c29] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden"
+                        >
+                          {searchResults.map((result, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                setFormData({...formData, symbol: result.symbol});
+                                setShowSuggestions(false);
+                              }}
+                              className="w-full text-left px-4 py-3 hover:bg-white/5 border-b border-white/5 last:border-0 transition-colors flex justify-between items-center group cursor-pointer"
+                            >
+                              <div>
+                                <p className="font-bold text-white group-hover:text-primary transition-colors">{result.symbol}</p>
+                                <p className="text-xs text-gray-400 truncate max-w-[200px]">{result.name}</p>
+                              </div>
+                              <span className="text-[10px] bg-white/5 px-2 py-1 rounded text-gray-500 uppercase">{result.type}</span>
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                   <button 
                     onClick={handleValidationStep}

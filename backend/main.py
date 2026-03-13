@@ -220,17 +220,53 @@ async def add_transaction(symbol: str, quantity: float, price: float, type: str,
         db.close()
 
 @app.get("/api/stock/validate")
-async def validate_stock(symbol: str):
-    """Verifica se um ticker existe e retorna o nome da empresa correspondente."""
+async def validate_stock(symbol: str, category: str = "stocks"):
+    """Verifica se um ticker existe. Auto-completa B3 com .SA."""
+    # Append .SA for Brazilian assets if missing
+    if category in ["stocks", "fii"] and not symbol.endswith(".SA"):
+        search_symbol = f"{symbol}.SA"
+        display_symbol = symbol
+    else:
+        search_symbol = symbol
+        display_symbol = symbol
+
     try:
-        ticker = yf.Ticker(symbol)
+        ticker = yf.Ticker(search_symbol)
         info = ticker.info
         if 'shortName' in info or 'longName' in info:
-            name = info.get('shortName', info.get('longName', symbol))
-            return {"valid": True, "symbol": symbol, "name": name, "currency": info.get('currency', 'BRL')}
+            name = info.get('shortName', info.get('longName', search_symbol))
+            return {"valid": True, "symbol": display_symbol, "search_symbol": search_symbol, "name": name, "currency": info.get('currency', 'BRL')}
         return {"valid": False, "error": "Ticker não encontrado."}
     except Exception as e:
         return {"valid": False, "error": str(e)}
+
+@app.get("/api/stock/search")
+async def search_stock(query: str):
+    """Retorna sugestões do Yahoo Finance Autocomplete."""
+    import requests
+    try:
+        url = f"https://query2.finance.yahoo.com/v1/finance/search?q={query}"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers)
+        data = response.json()
+        
+        results = []
+        if "quotes" in data:
+            for q in data["quotes"]:
+                if 'symbol' in q and 'shortname' in q:
+                    symbol = q['symbol']
+                    # Limpa o .SA para exibição mais limpa se o usuário quiser
+                    display_symbol = symbol.replace('.SA', '') if symbol.endswith('.SA') else symbol
+                    results.append({
+                        "symbol": display_symbol,
+                        "search_symbol": symbol,
+                        "name": q['shortname'],
+                        "type": q.get('quoteType', 'EQUITY'),
+                        "exchange": q.get('exchange', '')
+                    })
+        return {"results": results[:5]} # Retorna os top 5
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/api/stock/historical")
 async def get_historical_price(symbol: str, date: str):
